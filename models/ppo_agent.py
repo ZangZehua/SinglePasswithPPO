@@ -81,7 +81,7 @@ class PPO:
             action += 7
             action /= 10
         else:
-            raise NotImplementedError
+            return 0.6
         return action
 
     def reward_scaling(self, lambd=1):
@@ -92,6 +92,13 @@ class PPO:
         self.buffer.reward = self.buffer.reward_d + lambd * self.buffer.reward_mi
 
     def learn(self):
+        # check shape
+        print("state", self.buffer.state.shape)
+        print("action", self.buffer.action.shape)
+        print("action prob", self.buffer.action_prob.shape)
+        print("reward", self.buffer.reward.shape)
+        print("done", self.buffer.done)
+
         loss_function = torch.nn.MSELoss()
         # Monte Carlo estimate of returns
         self.buffer.reward = self.buffer.reward.squeeze(dim=-1)

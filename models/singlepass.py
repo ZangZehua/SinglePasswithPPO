@@ -9,7 +9,7 @@ from sklearn.metrics import silhouette_score
 
 
 class SinglePass:
-    def __init__(self, sim_threshold, data, flag, label, size, agent):
+    def __init__(self, sim_threshold, data, flag, label, size, agent, sim=False):
         self.device = torch.device('cuda:0')
         self.text_vec = None  #
         self.topic_serial = None
@@ -28,9 +28,16 @@ class SinglePass:
             self.pseudo_labels_tight = self.run_cluster_init(0.55, size)
             self.pseudo_labels_loose = self.run_cluster_init(0.65, size)
 
-        self.cluster_result = self.run_cluster(flag, size)  # clustering
-
         self.agent = agent
+        self.sim = sim
+        if self.sim:
+            self.cluster_result = self.run_cluster_sim(flag, size)  # clustering
+        else:
+            state = self.get_state()
+            state = torch.Tensor(state).cuda().unsqueeze(0)
+            action = self.agent.select_action(state)
+            self.sim_threshold = action
+            self.cluster_result = self.run_cluster(flag, size)
 
     def clustering(self, sen_vec):
         if self.topic_cnt == 0:
@@ -49,6 +56,33 @@ class SinglePass:
                 self.topic_cnt += 1
                 self.topic_serial.append(self.topic_cnt)
 
+    def run_cluster_sim(self, flag, size):
+        self.text_vec = []
+        self.topic_serial = []
+        self.topic_cnt = 0
+        if flag == 1:
+            self.text_vec = self.done_data
+            self.topic_serial = copy.deepcopy(self.done_label)
+            self.topic_cnt = max(self.topic_serial)
+            self.get_center()
+        i = 0
+        for vec in self.new_data:
+            state = self.get_state()
+            state = torch.Tensor(state).cuda().unsqueeze(0)
+
+            if i % 1000 == 0:
+                print(i)
+            i = i + 1
+            action = self.agent.select_action(state)
+            self.sim_threshold = action
+            self.clustering(vec)
+            reward = self.get_reward()
+            self.agent.buffer.reward = torch.cat((self.agent.buffer.reward, torch.Tensor(reward).cuda().unsqueeze(0)), dim=1)
+            self.agent.buffer.done = torch.cat((self.agent.buffer.done, torch.Tensor(False).cuda().unsqueeze(0)), dim=1)
+        self.agent.buffer.done[-1] = torch.Tensor(True).cuda()
+        self.agent.learn()
+        return self.topic_serial[len(self.topic_serial) - size:]
+
     def run_cluster(self, flag, size):
         self.text_vec = []
         self.topic_serial = []
@@ -58,10 +92,6 @@ class SinglePass:
             self.topic_serial = copy.deepcopy(self.done_label)
             self.topic_cnt = max(self.topic_serial)
             self.get_center()
-            reward = self.get_reward(size)
-            state = self.get_state()
-            print(state)
-            print(reward)
         i = 0
         for vec in self.new_data:
             if i % 1000 == 0:
@@ -153,7 +183,7 @@ class SinglePass:
             cohdist = np.dot(tmp_vec, tmp_vec.T)
             cohdist = np.maximum(cohdist, -cohdist)
             coh_dists = coh_dists + (cohdist.sum() - cluster.shape[0]) / (2 * sums + 0.0001)
-        print("check", coh_dists, max(self.topic_serial))
+        # print("check", coh_dists, max(self.topic_serial))
         state_dict['aver_coh_dist'] = coh_dists / max(self.topic_serial)
         state = []
         for key in state_dict:
@@ -161,7 +191,7 @@ class SinglePass:
         state.append(silhouette_score(self.new_data, self.pseudo_labels, metric='euclidean'))
         return state
 
-    def get_reward(self, size):  # get reward of RL
+    def get_reward(self):  # get reward of RL
         pseudo_labels = torch.tensor(self.pseudo_labels).to(self.device)
         pseudo_labels_tight = torch.tensor(self.pseudo_labels_tight).to(self.device)
         pseudo_labels_loose = torch.tensor(self.pseudo_labels_loose).to(self.device)

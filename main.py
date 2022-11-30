@@ -22,11 +22,14 @@ blocks_data = []
 blocks_label = []
 for i in range(block_num):
     blocks_data.append(all_data[0: block_size*(i+1)])
+    blocks_label.append(all_label[0: block_size*(i+1)])
 # env end
 
 # SinglePass with PPO
-agent = PPO(4, 1, action_std_init=0.6, continuous=True)
-sp = SinglePass(0.6, all_data, 1, all_label, 256)
+agent = PPO(5, 1, action_std_init=0.6, continuous=True)
+for data, label in zip(blocks_data, blocks_label):
+    # sp_sim = SinglePass(0.6, data, 1, label, 256, agent, sim=True)
+    sp = SinglePass(0.6, data, 1, label, 256, agent, sim=False)
 # cluster begin
 # state_dim =
 # agent = PPO()

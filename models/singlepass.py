@@ -33,6 +33,10 @@ class SinglePass:
         if self.sim:
             self.cluster_result = self.run_cluster_sim(flag, size)  # clustering
         else:
+            self.text_vec = self.done_data
+            self.topic_serial = copy.deepcopy(self.done_label)
+            self.topic_cnt = max(self.topic_serial)
+            self.get_center()
             state = self.get_state()
             state = torch.Tensor(state).cuda().unsqueeze(0)
             action = self.agent.select_action(state)
@@ -46,6 +50,7 @@ class SinglePass:
             self.topic_serial = [self.topic_cnt]
         else:
             sim_vec = np.dot(sen_vec, self.text_vec.T)
+            print("check sim_vec:", sim_vec)
             max_value = np.max(sim_vec)
 
             topic_ser = self.topic_serial[np.argmax(sim_vec)]

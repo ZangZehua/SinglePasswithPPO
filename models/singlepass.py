@@ -40,8 +40,9 @@ class SinglePass:
             state = self.get_state()
             state = torch.Tensor(state).cuda().unsqueeze(0)
             action = self.agent.select_action(state)
-            self.sim_threshold = action
-            self.cluster_result = self.run_cluster(flag, size)
+            self.sim_threshold = action.item()
+            self.cluster_result = self.run_cluster(flag, size)  # clustering
+            self.agent.buffer.clear_buffer()
 
     def clustering(self, sen_vec):
         if self.topic_cnt == 0:
@@ -50,11 +51,11 @@ class SinglePass:
             self.topic_serial = [self.topic_cnt]
         else:
             sim_vec = np.dot(sen_vec, self.text_vec.T)
-            print("check sim_vec:", sim_vec)
             max_value = np.max(sim_vec)
 
             topic_ser = self.topic_serial[np.argmax(sim_vec)]
             self.text_vec = np.vstack([self.text_vec, sen_vec])
+
             if max_value >= self.sim_threshold:
                 self.topic_serial.append(topic_ser)
             else:
@@ -79,12 +80,12 @@ class SinglePass:
                 print(i)
             i = i + 1
             action = self.agent.select_action(state)
-            self.sim_threshold = action
+            self.sim_threshold = action.item()
             self.clustering(vec)
             reward = self.get_reward()
-            self.agent.buffer.reward = torch.cat((self.agent.buffer.reward, torch.Tensor(reward).cuda().unsqueeze(0)), dim=1)
-            self.agent.buffer.done = torch.cat((self.agent.buffer.done, torch.Tensor(False).cuda().unsqueeze(0)), dim=1)
-        self.agent.buffer.done[-1] = torch.Tensor(True).cuda()
+            self.agent.buffer.reward = torch.cat((self.agent.buffer.reward, torch.Tensor([reward]).cuda().unsqueeze(0)), dim=0)
+            self.agent.buffer.done = torch.cat((self.agent.buffer.done, torch.Tensor([False]).cuda().unsqueeze(0)), dim=0)
+        self.agent.buffer.done[-1] = torch.Tensor([True]).cuda()
         self.agent.learn()
         return self.topic_serial[len(self.topic_serial) - size:]
 
@@ -163,7 +164,6 @@ class SinglePass:
     def get_state(self):  # get state of RL
         state_dict = {}
         state_dict['num_of_clusters'] = max(self.topic_serial)
-        # print("check self.topic_serial", self.topic_serial)
         centers = np.array(self.centers)
         # calculate the neighbor distance
         neighbor_dists = np.dot(centers, centers.T)
@@ -173,10 +173,7 @@ class SinglePass:
         neighbor_dists = np.nan_to_num(neighbor_dists, 0.0001)
         # minimum neighbor distance
         state_dict['min_neighbor_dist'] = neighbor_dists.min()
-
-        # print("check neighbor_dist", neighbor_dists)
         state_dict['aver_sep_dist'] = (neighbor_dists.mean() * max(self.topic_serial) - 1) / max(self.topic_serial)
-
         coh_dists = 0
         info_of_cluster = self.get_info_cluster()
         for cluster in info_of_cluster:
@@ -188,12 +185,12 @@ class SinglePass:
             cohdist = np.dot(tmp_vec, tmp_vec.T)
             cohdist = np.maximum(cohdist, -cohdist)
             coh_dists = coh_dists + (cohdist.sum() - cluster.shape[0]) / (2 * sums + 0.0001)
-        # print("check", coh_dists, max(self.topic_serial))
         state_dict['aver_coh_dist'] = coh_dists / max(self.topic_serial)
         state = []
         for key in state_dict:
             state.append(state_dict[key])
         state.append(silhouette_score(self.new_data, self.pseudo_labels, metric='euclidean'))
+
         return state
 
     def get_reward(self):  # get reward of RL
@@ -216,4 +213,4 @@ class SinglePass:
         del pseudo_labels
         del pseudo_labels_tight
         del pseudo_labels_loose
-        return int(R_indep.mean().item() + R_comp.mean().item())
+        return int(R_indep.mean().item() + R_comp.mean().item()) + 0.0001

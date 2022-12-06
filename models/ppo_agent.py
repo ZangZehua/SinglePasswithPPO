@@ -92,13 +92,6 @@ class PPO:
         self.buffer.reward = self.buffer.reward_d + lambd * self.buffer.reward_mi
 
     def learn(self):
-        # check shape
-        print("state", self.buffer.state.shape)
-        print("action", self.buffer.action.shape)
-        print("action prob", self.buffer.action_prob.shape)
-        print("reward", self.buffer.reward.shape)
-        print("done", self.buffer.done)
-
         loss_function = torch.nn.MSELoss()
         # Monte Carlo estimate of returns
         self.buffer.reward = self.buffer.reward.squeeze(dim=-1)
@@ -106,7 +99,7 @@ class PPO:
         rewards = []
         discounted_reward = 0
         for reward, done in zip(reversed(self.buffer.reward), reversed(self.buffer.done)):
-            if done:
+            if done.item():
                 discounted_reward = 0
             discounted_reward = reward + (0.99 * discounted_reward)
             rewards.insert(0, discounted_reward)

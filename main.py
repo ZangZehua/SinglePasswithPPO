@@ -1,6 +1,7 @@
 import numpy as np
 
 from models.singlepass import SinglePass
+from models.singlepass_env import SinglePass as SinglePassEnv
 from models.ppo_agent import PPO
 
 
@@ -27,9 +28,16 @@ for i in range(block_num):
 
 # SinglePass with PPO
 agent = PPO(5, 1, action_std_init=0.6, continuous=True)
-for data, label in zip(blocks_data, blocks_label):
+first_time = True
+for idx, (data, label) in enumerate(zip(blocks_data, blocks_label)):
+    print("blocks:", idx, data.shape, len(label))
+    if first_time:
+        first_time = False
+        continue
+    # sp_env = SinglePassEnv(0.6, data, 1, label, 256)
     sp_sim = SinglePass(0.6, data, 1, label, 256, agent, sim=True)
     sp = SinglePass(0.6, data, 1, label, 256, agent, sim=False)
+    print("done once")
 # cluster begin
 # state_dim =
 # agent = PPO()
